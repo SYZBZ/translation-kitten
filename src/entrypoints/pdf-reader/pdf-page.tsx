@@ -1,35 +1,54 @@
 import type { PDFPageProxy } from "pdfjs-dist"
 import type { PdfRenderableSegment } from "./pdf-segments"
 import { useEffect, useRef, useState } from "react"
+import { getFittedPdfViewportScale } from "./pdf-layout"
 import { extractPdfSegments } from "./pdf-segments"
 
 interface PdfPageProps {
   page: PDFPageProxy
+  availableWidth: number
+  initialSegments: PdfRenderableSegment[]
   activeSegmentId: string | null
   onSelect: (segmentId: string) => void
   onSegments: (page: number, segments: PdfRenderableSegment[]) => void
 }
 
-export function PdfPage({ page, activeSegmentId, onSelect, onSegments }: PdfPageProps) {
+export function PdfPage({ page, availableWidth, initialSegments, activeSegmentId, onSelect, onSegments }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [segments, setSegments] = useState<PdfRenderableSegment[]>([])
-  const [size, setSize] = useState({ width: 0, height: 0, scale: 1.35 })
+  const [segments, setSegments] = useState<PdfRenderableSegment[]>(initialSegments)
+  const [size, setSize] = useState({ width: 0, height: 0, scale: 1 })
 
   useEffect(() => {
+    const baseViewport = page.getViewport({ scale: 1 })
+    const scale = getFittedPdfViewportScale(baseViewport.width, availableWidth, 1.35)
+    const viewport = page.getViewport({ scale })
+    setSize({ width: viewport.width, height: viewport.height, scale })
+    const canvas = canvasRef.current
+    if (!canvas)
+      return
+
+    const ratio = window.devicePixelRatio || 1
+    canvas.width = Math.floor(viewport.width * ratio)
+    canvas.height = Math.floor(viewport.height * ratio)
+    canvas.style.width = `${viewport.width}px`
+    canvas.style.height = `${viewport.height}px`
+    const context = canvas.getContext("2d")!
+    const renderTask = page.render({ canvasContext: context, canvas, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] })
+    void renderTask.promise.catch((reason) => {
+      if (reason instanceof Error && reason.name !== "RenderingCancelledException")
+        console.error(reason)
+    })
+    return () => renderTask.cancel()
+  }, [availableWidth, page])
+
+  useEffect(() => {
+    if (initialSegments.length > 0) {
+      setSegments(initialSegments)
+      return
+    }
+
     let cancelled = false
     const render = async () => {
-      const viewport = page.getViewport({ scale: 1.35 })
-      setSize({ width: viewport.width, height: viewport.height, scale: 1.35 })
-      const canvas = canvasRef.current
-      if (!canvas)
-        return
-      const ratio = window.devicePixelRatio || 1
-      canvas.width = Math.floor(viewport.width * ratio)
-      canvas.height = Math.floor(viewport.height * ratio)
-      canvas.style.width = `${viewport.width}px`
-      canvas.style.height = `${viewport.height}px`
-      const context = canvas.getContext("2d")!
-      await page.render({ canvasContext: context, canvas, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] }).promise
       const textContent = await page.getTextContent()
       if (cancelled)
         return
@@ -41,7 +60,7 @@ export function PdfPage({ page, activeSegmentId, onSelect, onSegments }: PdfPage
     return () => {
       cancelled = true
     }
-  }, [onSegments, page])
+  }, [initialSegments, onSegments, page])
 
   return (
     <section className="pdf-page" style={{ width: size.width, height: size.height }}>
