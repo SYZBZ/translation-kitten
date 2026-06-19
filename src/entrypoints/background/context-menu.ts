@@ -12,6 +12,35 @@ import { getPageTranslationEnabled, setPageTranslationEnabled } from "./page-tra
 export const MENU_ID_TRANSLATE = "read-frog-translate"
 export const MENU_ID_SELECTION_TRANSLATE = "read-frog-selection-translate"
 export const MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX = "read-frog-selection-custom-action:"
+const HOST_CONTENT_SCRIPT_FILE = "/content-scripts/host.js"
+const SELECTION_CONTENT_SCRIPT_FILE = "/content-scripts/selection.js"
+
+function isMissingContentScriptReceiver(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("Could not establish connection")
+    || message.includes("Receiving end does not exist")
+}
+
+async function sendWithContentScriptRecovery(
+  send: () => Promise<unknown>,
+  target: { tabId: number, frameId: number },
+  contentScriptFile: typeof HOST_CONTENT_SCRIPT_FILE | typeof SELECTION_CONTENT_SCRIPT_FILE,
+) {
+  try {
+    await send()
+  }
+  catch (error) {
+    if (!isMissingContentScriptReceiver(error)) {
+      throw error
+    }
+
+    await browser.scripting.executeScript({
+      target: { tabId: target.tabId, frameIds: [target.frameId] },
+      files: [contentScriptFile],
+    })
+    await send()
+  }
+}
 
 function getSelectionCustomActionMenuId(actionId: string) {
   return `${MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX}${actionId}`
@@ -204,12 +233,16 @@ async function handleTranslateClick(tabId: number) {
   }
 
   // Notify content script in that specific tab
-  void sendMessage("askManagerToTogglePageTranslation", {
-    enabled: newState,
-    analyticsContext: newState
-      ? createFeatureUsageContext(ANALYTICS_FEATURE.PAGE_TRANSLATION, ANALYTICS_SURFACE.CONTEXT_MENU)
-      : undefined,
-  }, tabId)
+  await sendWithContentScriptRecovery(
+    () => sendMessage("askManagerToTogglePageTranslation", {
+      enabled: newState,
+      analyticsContext: newState
+        ? createFeatureUsageContext(ANALYTICS_FEATURE.PAGE_TRANSLATION, ANALYTICS_SURFACE.CONTEXT_MENU)
+        : undefined,
+    }, tabId),
+    { tabId, frameId: 0 },
+    HOST_CONTENT_SCRIPT_FILE,
+  )
 
   // Update menu title immediately
   await updateTranslateMenuTitle(tabId, newState)
@@ -228,9 +261,11 @@ async function handleSelectionTranslateClick(
     ? { tabId, frameId: info.frameId }
     : tabId
 
-  void sendMessage("openSelectionTranslationFromContextMenu", {
-    selectionText,
-  }, target)
+  await sendWithContentScriptRecovery(
+    () => sendMessage("openSelectionTranslationFromContextMenu", { selectionText }, target),
+    { tabId, frameId: info.frameId ?? 0 },
+    SELECTION_CONTENT_SCRIPT_FILE,
+  )
 }
 
 async function handleSelectionCustomActionClick(
@@ -247,8 +282,9 @@ async function handleSelectionCustomActionClick(
     ? { tabId, frameId: info.frameId }
     : tabId
 
-  void sendMessage("openSelectionCustomActionFromContextMenu", {
-    actionId,
-    selectionText,
-  }, target)
+  await sendWithContentScriptRecovery(
+    () => sendMessage("openSelectionCustomActionFromContextMenu", { actionId, selectionText }, target),
+    { tabId, frameId: info.frameId ?? 0 },
+    SELECTION_CONTENT_SCRIPT_FILE,
+  )
 }

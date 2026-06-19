@@ -439,8 +439,8 @@ export function SelectionTranslationProvider({
     })
   }, [commitOpenRequest, selectionSession])
 
-  const resolveContextMenuRequest = useCallback((): SelectionTranslatePendingOpenRequest | null => {
-    const request = resolveContextMenuOpenRequest()
+  const resolveContextMenuRequest = useCallback((selectionText?: string): SelectionTranslatePendingOpenRequest | null => {
+    const request = resolveContextMenuOpenRequest(selectionText)
     if (!request) {
       return null
     }
@@ -496,8 +496,8 @@ export function SelectionTranslationProvider({
     handleOpenChange(true)
   }, [commitOpenRequest, handleOpenChange, isOpen])
 
-  const openFromContextMenu = useCallback(() => {
-    openSelectionTranslationRequest(resolveContextMenuRequest(), {
+  const openFromContextMenu = useCallback((selectionText?: string) => {
+    openSelectionTranslationRequest(resolveContextMenuRequest(selectionText), {
       showMissingSelectionToast: true,
     })
   }, [openSelectionTranslationRequest, resolveContextMenuRequest])
@@ -530,8 +530,8 @@ export function SelectionTranslationProvider({
   }, [openFromShortcut, selectionToolbar.features.translate.shortcut])
 
   useEffect(() => {
-    return onMessage("openSelectionTranslationFromContextMenu", () => {
-      openFromContextMenu()
+    return onMessage("openSelectionTranslationFromContextMenu", (message) => {
+      openFromContextMenu(message.data.selectionText)
     })
   }, [openFromContextMenu])
 

@@ -1031,21 +1031,27 @@ describe("selection toolbar requests", () => {
     expect(toastErrorMock).not.toHaveBeenCalled()
   })
 
-  it("shows a toast when the context menu request cannot recover a selection snapshot", async () => {
+  it("translates the context-menu text when the content script was injected after selection", async () => {
+    translateTextCoreMock.mockResolvedValue("Recovered result")
     const store = createStore()
     store.set(configAtom, cloneConfig(DEFAULT_CONFIG))
     renderWithProviders(<TranslateButton />, store)
 
     const handler = getRegisteredMessageHandler<{ selectionText: string }>("openSelectionTranslationFromContextMenu")
 
-    act(() => {
+    await act(async () => {
       handler({ data: { selectionText: "Missing selection" } })
+      await Promise.resolve()
     })
 
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "options.floatingButtonAndToolbar.selectionToolbar.errors.missingSelection",
-    )
-    expect(translateTextCoreMock).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(translateTextCoreMock).toHaveBeenCalledWith(expect.objectContaining({
+        text: "Missing selection",
+      }))
+    })
+    expect(screen.getByTestId("translation-selection")).toHaveTextContent("Missing selection")
+    expect(screen.getByTestId("translation-result")).toHaveTextContent("Recovered result")
+    expect(toastErrorMock).not.toHaveBeenCalled()
   })
 
   it("opens selection translation from the shortcut and tracks the shortcut surface", async () => {

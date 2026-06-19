@@ -4,6 +4,7 @@ import { browser, i18n, storage } from "#imports"
 
 const sendMessageMock = vi.fn()
 const ensureInitializedConfigMock = vi.fn()
+const executeScriptMock = vi.fn()
 const contextMenuClickListeners: Array<(info: any, tab?: any) => Promise<void> | void> = []
 
 vi.mock("@/utils/message", () => ({
@@ -36,6 +37,7 @@ describe("background context menu", () => {
     browser.contextMenus.onClicked.addListener = vi.fn((listener) => {
       contextMenuClickListeners.push(listener as (info: any, tab?: any) => Promise<void> | void)
     })
+    browser.scripting.executeScript = executeScriptMock
 
     browser.tabs.query = vi.fn().mockResolvedValue([{ id: 1 }])
     browser.tabs.onActivated.addListener = vi.fn()
@@ -139,6 +141,33 @@ describe("background context menu", () => {
       { selectionText: "Selected text" },
       { tabId: 5, frameId: 7 },
     )
+  })
+
+  it("injects the selection content script and retries when an existing tab has no receiver", async () => {
+    sendMessageMock
+      .mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+      .mockResolvedValueOnce(undefined)
+    executeScriptMock.mockResolvedValue(undefined)
+
+    const { MENU_ID_SELECTION_TRANSLATE, registerContextMenuListeners } = await import("../context-menu")
+    registerContextMenuListeners()
+
+    const clickHandler = contextMenuClickListeners[0]
+    if (!clickHandler) {
+      throw new Error("Context menu click listener was not registered")
+    }
+
+    await clickHandler({
+      menuItemId: MENU_ID_SELECTION_TRANSLATE,
+      selectionText: "Selected text",
+      frameId: 0,
+    }, { id: 5 })
+
+    expect(executeScriptMock).toHaveBeenCalledWith({
+      target: { tabId: 5, frameIds: [0] },
+      files: ["/content-scripts/selection.js"],
+    })
+    expect(sendMessageMock).toHaveBeenCalledTimes(2)
   })
 
   it("routes custom action menu clicks to the matching tab and frame", async () => {

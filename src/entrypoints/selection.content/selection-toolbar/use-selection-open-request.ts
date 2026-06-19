@@ -2,6 +2,7 @@ import type { SelectionRangeSnapshot } from "../utils"
 import type { SelectionSession } from "./atoms"
 import { useCallback, useEffect, useRef } from "react"
 import { toLiveRange } from "../utils"
+import { createTextOnlySelectionSession } from "./atoms"
 
 interface SelectionAnchor {
   x: number
@@ -120,8 +121,17 @@ export function useSelectionOpenRequestResolver(selectionSession: SelectionSessi
     }
   }, [selectionSession])
 
-  const resolveContextMenuOpenRequest = useCallback((): SelectionOpenRequest | null =>
-    resolveSelectionOpenRequest(SELECTION_OPEN_REQUEST_TRIGGER.CONTEXT_MENU), [resolveSelectionOpenRequest])
+  const resolveContextMenuOpenRequest = useCallback((selectionText?: string): SelectionOpenRequest | null => {
+    const resolved = resolveSelectionOpenRequest(SELECTION_OPEN_REQUEST_TRIGGER.CONTEXT_MENU)
+    if (resolved) {
+      return resolved
+    }
+
+    const fallbackSession = createTextOnlySelectionSession(selectionText ?? "")
+    return fallbackSession
+      ? { anchor: getViewportCenterAnchor(), session: fallbackSession }
+      : null
+  }, [resolveSelectionOpenRequest])
 
   const resolveShortcutOpenRequest = useCallback((): SelectionOpenRequest | null =>
     resolveSelectionOpenRequest(SELECTION_OPEN_REQUEST_TRIGGER.SHORTCUT), [resolveSelectionOpenRequest])

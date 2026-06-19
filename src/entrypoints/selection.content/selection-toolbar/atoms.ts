@@ -9,7 +9,7 @@ import { selectAtom } from "jotai/utils"
 import { configAtom } from "@/utils/atoms/config"
 import { getProviderConfigById } from "@/utils/config/helpers"
 import { resolveProviderConfigOrNull } from "@/utils/constants/feature-providers"
-import { buildContextSnapshot } from "../utils"
+import { buildContextSnapshot, normalizeSelectedText } from "../utils"
 
 export interface SelectionSession {
   id: number
@@ -39,6 +39,18 @@ function createSelectionSession(
     selectionSnapshot: selection,
     contextSnapshot: nextContext,
   }
+}
+
+export function createTextOnlySelectionSession(text: string): SelectionSession | null {
+  const normalizedText = normalizeSelectedText(text)
+  if (!normalizedText) {
+    return null
+  }
+
+  return createSelectionSession(
+    { text: normalizedText, ranges: [] },
+    { text: normalizedText, paragraphs: [normalizedText] },
+  )
 }
 
 export const selectionSessionAtom = atom<SelectionSession | null>(null)
