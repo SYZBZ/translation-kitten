@@ -47,4 +47,13 @@ describe("github workflow hardening", () => {
       }
     }
   })
+
+  it("does not generate fork release notes from the upstream repository", () => {
+    const config = JSON.parse(readFileSync(join(process.cwd(), ".changeset", "config.json"), "utf8")) as {
+      changelog: unknown
+    }
+
+    expect(config.changelog).toBe(false)
+    expect(JSON.stringify(config)).not.toContain("mengxi-ream/read-frog")
+  })
 })
