@@ -1,7 +1,7 @@
 {
   "name": "translation-kitten",
   "type": "module",
-  "version": "1.35.1",
+  "version": "1.35.2",
   "private": true,
   "packageManager": "pnpm@10.33.4",
   "description": "Translation Kitten browser extension for webpages, PDFs, and YouTube subtitles",
