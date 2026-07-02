@@ -64,6 +64,21 @@ describe("extension env resolution", () => {
       WXT_POSTHOG_TEST_UUID: "00000000-0000-0000-0000-000000000001",
     })
   })
+
+  it("treats empty optional integration env vars as unset", () => {
+    expect(resolveExtensionEnv({
+      WXT_GOOGLE_CLIENT_ID: "",
+      WXT_POSTHOG_HOST: "",
+      WXT_POSTHOG_API_KEY: "",
+      WXT_POSTHOG_TEST_UUID: "",
+    })).toMatchObject({
+      ...PRODUCTION_EXTENSION_ENV_DEFAULTS,
+      WXT_GOOGLE_CLIENT_ID: undefined,
+      WXT_POSTHOG_HOST: undefined,
+      WXT_POSTHOG_API_KEY: undefined,
+      WXT_POSTHOG_TEST_UUID: undefined,
+    })
+  })
 })
 
 describe("extension env parsing", () => {
@@ -142,6 +157,20 @@ describe("extension env parsing", () => {
       WXT_WEBSITE_URL: PRODUCTION_EXTENSION_ENV_DEFAULTS.WXT_WEBSITE_URL,
       WXT_OFFICIAL_SITE_ORIGINS: ["https://readfrog.app", "https://www.readfrog.app"],
       WXT_AUTH_COOKIE_DOMAINS: ["readfrog.app"],
+      WXT_GOOGLE_CLIENT_ID: undefined,
+      WXT_POSTHOG_HOST: undefined,
+      WXT_POSTHOG_API_KEY: undefined,
+      WXT_POSTHOG_TEST_UUID: undefined,
+    })
+  })
+
+  it("accepts empty GitHub Actions optional env vars when production validation is skipped", () => {
+    expect(parseResolvedExtensionEnv({
+      WXT_GOOGLE_CLIENT_ID: "",
+      WXT_POSTHOG_HOST: "",
+      WXT_POSTHOG_API_KEY: "",
+      WXT_POSTHOG_TEST_UUID: "",
+    }, true, true)).toMatchObject({
       WXT_GOOGLE_CLIENT_ID: undefined,
       WXT_POSTHOG_HOST: undefined,
       WXT_POSTHOG_API_KEY: undefined,

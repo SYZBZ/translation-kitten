@@ -86,6 +86,10 @@ export function isLocalPackagesEnabled(rawEnv: RawExtensionEnv) {
   return rawBooleanSchema.parse(rawEnv.WXT_USE_LOCAL_PACKAGES) ?? false
 }
 
+function optionalRawEnvValue(value: RawEnvValue) {
+  return value === "" ? undefined : value
+}
+
 export function resolveExtensionEnv(rawEnv: RawExtensionEnv) {
   const defaults = isLocalPackagesEnabled(rawEnv)
     ? LOCAL_EXTENSION_ENV_DEFAULTS
@@ -97,6 +101,10 @@ export function resolveExtensionEnv(rawEnv: RawExtensionEnv) {
     WXT_WEBSITE_URL: rawEnv.WXT_WEBSITE_URL ?? defaults.WXT_WEBSITE_URL,
     WXT_OFFICIAL_SITE_ORIGINS: rawEnv.WXT_OFFICIAL_SITE_ORIGINS ?? defaults.WXT_OFFICIAL_SITE_ORIGINS,
     WXT_AUTH_COOKIE_DOMAINS: rawEnv.WXT_AUTH_COOKIE_DOMAINS ?? defaults.WXT_AUTH_COOKIE_DOMAINS,
+    WXT_GOOGLE_CLIENT_ID: optionalRawEnvValue(rawEnv.WXT_GOOGLE_CLIENT_ID),
+    WXT_POSTHOG_HOST: optionalRawEnvValue(rawEnv.WXT_POSTHOG_HOST),
+    WXT_POSTHOG_API_KEY: optionalRawEnvValue(rawEnv.WXT_POSTHOG_API_KEY),
+    WXT_POSTHOG_TEST_UUID: optionalRawEnvValue(rawEnv.WXT_POSTHOG_TEST_UUID),
   }
 }
 

@@ -67,7 +67,14 @@ jobs:
 
       - name: Send Discord Notification
         if: steps.changesets.outputs.published == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Discord webhook is not configured; skipping notification"
+            exit 0
+          fi
+
           VERSION=$(echo '${{ steps.changesets.outputs.publishedPackages }}' | jq -r '.[0].version')
           TAG="v$VERSION"
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG"
@@ -108,8 +115,8 @@ jobs:
             --arg timestamp "$TIMESTAMP" \
             '{
               embeds: [{
-                title: "🐸 Read Frog Release!",
-                description: ("**Read Frog** version `" + $version + "` has been released!"),
+                title: "Translation Kitten Release",
+                description: ("**Translation Kitten** version `" + $version + "` has been released. This is an independent GPL-3.0 fork derived from Read Frog."),
                 url: $url,
                 color: 48253,
                 fields: $fields,
@@ -119,7 +126,7 @@ jobs:
             }')
 
           # Send to Discord
-          RESPONSE=$(curl -s -w "%{http_code}" -H "Content-Type: application/json" -X POST -d "$DISCORD_PAYLOAD" ${{ secrets.DISCORD_WEBHOOK_URL }})
+          RESPONSE=$(curl -s -w "%{http_code}" -H "Content-Type: application/json" -X POST -d "$DISCORD_PAYLOAD" "$DISCORD_WEBHOOK_URL")
           HTTP_CODE=$(echo "$RESPONSE" | tail -c 4)
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
             echo "✅ Discord notification sent"
