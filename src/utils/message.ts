@@ -43,8 +43,9 @@ interface ProtocolMap {
   detectedPageLanguageChanged: (data: { detectedCode: LangCodeISO6393 }) => void
   // ask host to start page translation
   askManagerToTogglePageTranslation: (data: { enabled: boolean, analyticsContext?: FeatureUsageContext }) => void
-  openSelectionTranslationFromContextMenu: (data: { selectionText: string }) => void
-  openSelectionCustomActionFromContextMenu: (data: { actionId: string, selectionText: string }) => void
+  getSelectionContentScriptStatus: () => { ready: boolean }
+  openSelectionTranslationFromContextMenu: (data: { selectionText: string, tabId?: number }) => void
+  openSelectionCustomActionFromContextMenu: (data: { actionId: string, selectionText: string, tabId?: number }) => void
   // analytics
   trackFeatureUsedEvent: (data: FeatureUsedEventProperties) => void
   // user guide

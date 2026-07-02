@@ -295,7 +295,10 @@ button,
   }
 
   .translation-page {
+    height: auto !important;
+    max-height: none !important;
     min-height: 0 !important;
+    overflow-y: visible !important;
   }
 
   .pdf-page-placeholder,

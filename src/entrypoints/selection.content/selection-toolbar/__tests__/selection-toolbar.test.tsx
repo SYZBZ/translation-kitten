@@ -346,6 +346,39 @@ describe("selectionToolbar - isInputOrTextarea logic", () => {
     expectToolbarHidden()
   })
 
+  it("should not show toolbar when a youtube progress slider is clicked outside the selection", async () => {
+    render(
+      <div>
+        <SelectionToolbar />
+        <div data-testid="selected-element">{MOCK_SELECTED_TEXT}</div>
+        <div
+          aria-label="Seek slider"
+          data-testid="youtube-progress-slider"
+          role="slider"
+          tabIndex={0}
+        />
+      </div>,
+    )
+
+    await clearToolbarState()
+
+    const progressSlider = screen.getByTestId("youtube-progress-slider")
+
+    window.getSelection = vi.fn(() => ({
+      toString: vi.fn(() => MOCK_SELECTED_TEXT),
+      getRangeAt: () => ({
+        startContainer: document.body,
+        startOffset: 0,
+        endContainer: document.body,
+        endOffset: 1,
+      }),
+      containsNode: vi.fn((node: Node) => node !== progressSlider),
+    })) as unknown as typeof window.getSelection
+
+    await triggerMouseUpWithSelection(progressSlider)
+    expectToolbarHidden()
+  })
+
   it("should not show toolbar when shadow DOM retargets button clicks to the host element", async () => {
     render(
       <div>

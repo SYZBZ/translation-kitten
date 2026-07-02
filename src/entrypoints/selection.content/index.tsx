@@ -2,7 +2,6 @@ import "@/utils/zod-config"
 import type { ContentScriptContext } from "#imports"
 import type { ThemeMode } from "@/types/config/theme"
 import { QueryClientProvider } from "@tanstack/react-query"
-import { kebabCase } from "case-anything"
 import { Provider as JotaiProvider } from "jotai"
 import { useHydrateAtoms } from "jotai/utils"
 import ReactDOM from "react-dom/client"
@@ -11,8 +10,9 @@ import { ThemeProvider } from "@/components/providers/theme-provider"
 import { TooltipProvider } from "@/components/ui/base-ui/tooltip"
 import { baseThemeModeAtom } from "@/utils/atoms/theme"
 import { getLocalConfig } from "@/utils/config/storage"
-import { APP_NAME } from "@/utils/constants/app"
+import { CONTENT_SCRIPT_UI_NAMES } from "@/utils/constants/app"
 import { ensureIconifyBackgroundFetch } from "@/utils/iconify/setup-background-fetch"
+import { onMessage } from "@/utils/message"
 import { protectSelectAllShadowRoot } from "@/utils/select-all"
 import { insertShadowRootUIWrapperInto } from "@/utils/shadow-root"
 import { clearEffectiveSiteControlUrl, getEffectiveSiteControlUrl, isSiteEnabled } from "@/utils/site-control"
@@ -20,6 +20,7 @@ import { addStyleToShadow } from "@/utils/styles"
 import { queryClient } from "@/utils/tanstack-query"
 import { getLocalThemeMode } from "@/utils/theme"
 import App from "./app"
+import { setSelectionShadowWrapper } from "./shadow-wrapper-ref"
 import "@/assets/styles/theme.css"
 
 function HydrateAtoms({
@@ -33,12 +34,10 @@ function HydrateAtoms({
   return children
 }
 
-// eslint-disable-next-line import/no-mutable-exports
-export let shadowWrapper: HTMLElement | null = null
-
 declare global {
   interface Window {
     __READ_FROG_SELECTION_INJECTED__?: boolean
+    __READ_FROG_SELECTION_READY__?: boolean
   }
 }
 
@@ -48,12 +47,12 @@ async function mountSelectionUI(ctx: ContentScriptContext) {
   const themeMode = await getLocalThemeMode()
 
   const ui = await createShadowRootUi(ctx, {
-    name: `${kebabCase(APP_NAME)}-selection`,
+    name: CONTENT_SCRIPT_UI_NAMES.selection,
     position: "overlay",
     anchor: "body",
     onMount: (container, shadow, shadowHost) => {
       const wrapper = insertShadowRootUIWrapperInto(container)
-      shadowWrapper = wrapper
+      setSelectionShadowWrapper(wrapper)
       addStyleToShadow(shadow)
       protectSelectAllShadowRoot(shadowHost, wrapper)
 
@@ -64,7 +63,12 @@ async function mountSelectionUI(ctx: ContentScriptContext) {
             <HydrateAtoms initialValues={[[baseThemeModeAtom, themeMode]]}>
               <ThemeProvider container={wrapper}>
                 <TooltipProvider>
-                  <App uiContainer={container} />
+                  <App
+                    uiContainer={container}
+                    onReady={() => {
+                      window.__READ_FROG_SELECTION_READY__ = true
+                    }}
+                  />
                 </TooltipProvider>
               </ThemeProvider>
             </HydrateAtoms>
@@ -74,8 +78,9 @@ async function mountSelectionUI(ctx: ContentScriptContext) {
       return root
     },
     onRemove: (root) => {
+      window.__READ_FROG_SELECTION_READY__ = false
       root?.unmount()
-      shadowWrapper = null
+      setSelectionShadowWrapper(null)
     },
   })
 
@@ -90,9 +95,16 @@ export default defineContentScript({
     if (window.__READ_FROG_SELECTION_INJECTED__)
       return
     window.__READ_FROG_SELECTION_INJECTED__ = true
+    window.__READ_FROG_SELECTION_READY__ = false
+
+    const cleanupStatusListener = onMessage("getSelectionContentScriptStatus", () => ({
+      ready: window.__READ_FROG_SELECTION_READY__ === true,
+    }))
 
     ctx.onInvalidated(() => {
+      cleanupStatusListener()
       window.__READ_FROG_SELECTION_INJECTED__ = false
+      window.__READ_FROG_SELECTION_READY__ = false
       clearEffectiveSiteControlUrl()
     })
 
@@ -100,7 +112,9 @@ export default defineContentScript({
     const config = await getLocalConfig()
     const siteControlUrl = getEffectiveSiteControlUrl(window.location.href)
     if (!isSiteEnabled(siteControlUrl, config)) {
+      cleanupStatusListener()
       window.__READ_FROG_SELECTION_INJECTED__ = false
+      window.__READ_FROG_SELECTION_READY__ = false
       clearEffectiveSiteControlUrl()
       return
     }

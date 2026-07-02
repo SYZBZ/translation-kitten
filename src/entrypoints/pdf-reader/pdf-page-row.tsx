@@ -3,6 +3,7 @@ import type { PdfRenderableSegment } from "./pdf-segments"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { getFittedPdfViewportScale } from "./pdf-layout"
 import { PdfPage } from "./pdf-page"
+import { createPdfTranslationBlocks } from "./pdf-segments"
 import { useNearViewport } from "./use-near-viewport"
 
 interface PdfPageRowProps {
@@ -83,10 +84,11 @@ export function PdfPageRow({
     const viewport = page.getViewport({ scale: 1 })
     return viewport.height * getFittedPdfViewportScale(viewport.width, sourceWidth, 1.35)
   }, [page, sourceWidth])
+  const translationBlocks = useMemo(() => createPdfTranslationBlocks(segments), [segments])
 
   if (!isNear) {
     return (
-      <section ref={nearRef} className="pdf-page-placeholder" data-testid="pdf-page-placeholder" aria-label={`第 ${pageNumber} 頁等待載入`}>
+      <section ref={nearRef} className="pdf-page-placeholder" data-testid="pdf-page-placeholder" aria-label={`第 ${pageNumber} 頁尚未接近畫面`}>
         <span>
           第
           {pageNumber}
@@ -112,7 +114,7 @@ export function PdfPageRow({
             )
           : (
               <div className="page-loading-card">
-                {pageError || `正在載入第 ${pageNumber} 頁…`}
+                {pageError || `正在讀取第 ${pageNumber} 頁...`}
               </div>
             )}
       </div>
@@ -120,7 +122,9 @@ export function PdfPageRow({
       <section
         className="translation-page"
         data-testid="translation-page"
-        style={fittedHeight > 0 ? { minHeight: fittedHeight } : undefined}
+        style={fittedHeight > 0
+          ? { height: fittedHeight, maxHeight: fittedHeight, overflowY: "auto" }
+          : undefined}
         onMouseUp={(event) => {
           const target = (event.target as HTMLElement).closest<HTMLElement>("[data-segment-id]")
           if (target?.dataset.segmentId)
@@ -135,13 +139,22 @@ export function PdfPageRow({
         {segments.length === 0 && (
           <div className="translation-empty">原文接近畫面時會自動擷取內容</div>
         )}
-        {segments.map(segment => (
-          <p key={segment.id} data-segment-id={segment.id} className={activeSegmentId === segment.id ? "is-synced" : ""}>
-            {translations[segment.id] || (
-              <span className="pending">{translationActive ? "等待翻譯…" : "尚未翻譯"}</span>
-            )}
-          </p>
-        ))}
+        {translationBlocks.map((block) => {
+          const isSynced = activeSegmentId ? block.segmentIds.includes(activeSegmentId) : false
+          return (
+            <p
+              key={block.id}
+              data-testid="pdf-translation-block"
+              data-block-id={block.id}
+              data-segment-id={block.segmentIds[0]}
+              className={isSynced ? "is-synced" : ""}
+            >
+              {translations[block.id] || (
+                <span className="pending">{translationActive ? "正在翻譯..." : "尚未翻譯"}</span>
+              )}
+            </p>
+          )
+        })}
       </section>
     </section>
   )

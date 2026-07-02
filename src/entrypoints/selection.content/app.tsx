@@ -13,8 +13,10 @@ import { SelectionTranslationProvider } from "./selection-toolbar/translate-butt
 
 export default function App({
   uiContainer,
+  onReady,
 }: {
   uiContainer: HTMLElement
+  onReady?: () => void
 }) {
   useInputTranslation()
   const opacity = useAtomValue(configFieldsAtomMap.selectionToolbar).opacity / 100
@@ -26,6 +28,10 @@ export default function App({
       uiContainer.style.removeProperty("--rf-selection-opacity")
     }
   }, [opacity, uiContainer])
+
+  useEffect(() => {
+    onReady?.()
+  }, [onReady])
 
   return (
     <>

@@ -40,6 +40,8 @@ const embedWrapperCSS = `
   }
 `
 
+const PLAYER_CONTROL_EVENT_TYPES = ["click", "mousedown", "pointerdown", "dblclick"]
+
 export function renderSubtitlesTranslateButton(adapter: SubtitlesProvidersAdapter): HTMLDivElement {
   const existingContainer = document.querySelector<HTMLDivElement>(`#${TRANSLATE_BUTTON_CONTAINER_ID}`)
   if (existingContainer)
@@ -63,10 +65,8 @@ export function renderSubtitlesTranslateButton(adapter: SubtitlesProvidersAdapte
 
   shadowHost.id = TRANSLATE_BUTTON_CONTAINER_ID
 
-  if (adapter.embedded) {
-    for (const eventType of ["click", "mousedown", "pointerdown", "dblclick"]) {
-      shadowHost.addEventListener(eventType, e => e.stopPropagation())
-    }
+  for (const eventType of PLAYER_CONTROL_EVENT_TYPES) {
+    shadowHost.addEventListener(eventType, e => e.stopPropagation())
   }
 
   return shadowHost

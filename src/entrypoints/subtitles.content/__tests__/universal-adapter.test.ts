@@ -1,8 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UniversalVideoAdapter } from "../universal-adapter"
 
 const mocks = vi.hoisted(() => ({
   getLocalConfig: vi.fn(),
+  toastError: vi.fn(),
+}))
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: mocks.toastError,
+  },
 }))
 
 vi.mock("@/utils/config/storage", async (importOriginal) => {
@@ -53,7 +61,8 @@ function attachScheduler(adapter: UniversalVideoAdapter, active: boolean) {
 describe("universalVideoAdapter", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal("document", { title: "Test video" })
+    document.body.innerHTML = ""
+    document.title = "Test video"
     mocks.getLocalConfig.mockResolvedValue({
       language: {},
       providersConfig: [],
@@ -62,6 +71,10 @@ describe("universalVideoAdapter", () => {
         providerId: null,
       },
     })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it("keeps raw source subtitles and rebuilds processed source subtitles", async () => {
@@ -165,5 +178,26 @@ describe("universalVideoAdapter", () => {
     ;(adapter as any).clearVisibleStateForNavigation()
 
     expect(downloader.dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not toast when video lookup fails for a silent platform", async () => {
+    vi.useFakeTimers()
+    const { adapter } = createAdapter([])
+    ;(adapter as any).config = {
+      selectors: {
+        video: "video",
+        playerContainer: ".missing-player",
+        nativeSubtitles: ".native-subtitles",
+      },
+      events: {},
+      silentErrors: true,
+    }
+
+    const initialize = (adapter as any).initializeScheduler()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    await initialize
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
   })
 })

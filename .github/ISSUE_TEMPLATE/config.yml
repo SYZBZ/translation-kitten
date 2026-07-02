@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Read Frog Discord
-    url: https://discord.gg/ej45e3PezJ
-    about: Quick questions or support are often answered faster in Discord.
-  - name: Official Website
-    url: https://readfrog.app
-    about: Learn more about Read Frog and access docs and resources.
+  - name: Translation Kitten source
+    url: https://github.com/SYZBZ/translation-kitten
+    about: Open an issue or pull request for this fork.
+  - name: Upstream Read Frog
+    url: https://github.com/mengxi-ream/read-frog
+    about: Original upstream project used as the base for this GPL fork.

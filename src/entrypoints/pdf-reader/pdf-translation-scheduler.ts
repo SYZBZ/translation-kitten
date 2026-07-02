@@ -1,11 +1,14 @@
-import type { PdfRenderableSegment } from "./pdf-segments"
+interface PdfTranslationQueueItem {
+  id: string
+  page?: number
+}
 
-function getSegmentPage(segment: PdfRenderableSegment) {
+function getSegmentPage(segment: PdfTranslationQueueItem) {
   return segment.page ?? Number.parseInt(/^p(\d+)-/.exec(segment.id)?.[1] ?? "0", 10)
 }
 
-export function prioritizePdfSegments(
-  segmentsByPage: Record<number, PdfRenderableSegment[]>,
+export function prioritizePdfSegments<T extends PdfTranslationQueueItem>(
+  segmentsByPage: Record<number, T[]>,
   nearPages: ReadonlySet<number>,
   translations: Readonly<Record<string, string>>,
 ) {

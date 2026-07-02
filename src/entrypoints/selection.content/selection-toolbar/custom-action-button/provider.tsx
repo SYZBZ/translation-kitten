@@ -4,16 +4,17 @@ import { useAtomValue, useSetAtom } from "jotai"
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { SelectionPopover } from "@/components/ui/selection-popover"
+import { isPdfContextMenuMessageForThisTab } from "@/entrypoints/pdf-reader/pdf-context-menu-target"
 import { ANALYTICS_FEATURE, ANALYTICS_SURFACE } from "@/types/analytics"
 import { isLLMProviderConfig } from "@/types/config/provider"
 import { createFeatureUsageContext, trackFeatureUsed } from "@/utils/analytics"
 import { configFieldsAtomMap, writeConfigAtom } from "@/utils/atoms/config"
 import { filterEnabledProvidersConfig, getProviderConfigById } from "@/utils/config/helpers"
 import { onMessage } from "@/utils/message"
-import { shadowWrapper } from "../.."
 import { SelectionToolbarErrorAlert } from "../../components/selection-toolbar-error-alert"
 import { SelectionToolbarFooterContent } from "../../components/selection-toolbar-footer-content"
 import { SelectionToolbarTitleContent } from "../../components/selection-toolbar-title-content"
+import { shadowWrapper } from "../../shadow-wrapper-ref"
 import { normalizeSelectedText } from "../../utils"
 import {
   contextAtom,
@@ -300,7 +301,11 @@ export function SelectionCustomActionProvider({
   }, [])
 
   useEffect(() => {
-    return onMessage("openSelectionCustomActionFromContextMenu", (message) => {
+    return onMessage("openSelectionCustomActionFromContextMenu", async (message) => {
+      if (message.data.tabId !== undefined && !(await isPdfContextMenuMessageForThisTab(message.data.tabId))) {
+        return
+      }
+
       openContextMenuCustomAction(message.data.actionId)
     })
   }, [openContextMenuCustomAction])

@@ -42,6 +42,7 @@ describe("background context menu", () => {
     browser.tabs.query = vi.fn().mockResolvedValue([{ id: 1 }])
     browser.tabs.onActivated.addListener = vi.fn()
     browser.tabs.onUpdated.addListener = vi.fn()
+    browser.runtime.getURL = vi.fn((path: string) => `chrome-extension://extension-id${path}`)
     browser.storage.session.onChanged.addListener = vi.fn()
 
     storage.watch = vi.fn()
@@ -143,9 +144,36 @@ describe("background context menu", () => {
     )
   })
 
+  it("routes PDF reader selection translation through extension runtime messaging", async () => {
+    const { MENU_ID_SELECTION_TRANSLATE, registerContextMenuListeners } = await import("../context-menu")
+
+    registerContextMenuListeners()
+
+    const clickHandler = contextMenuClickListeners[0]
+    if (!clickHandler) {
+      throw new Error("Context menu click listener was not registered")
+    }
+
+    await clickHandler({
+      menuItemId: MENU_ID_SELECTION_TRANSLATE,
+      selectionText: "Selected PDF text",
+      frameId: 0,
+    }, {
+      id: 5,
+      url: "chrome-extension://extension-id/pdf-reader.html?source=blob%3Aabc",
+    })
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      "openSelectionTranslationFromContextMenu",
+      { selectionText: "Selected PDF text", tabId: 5 },
+    )
+    expect(executeScriptMock).not.toHaveBeenCalled()
+  })
+
   it("injects the selection content script and retries when an existing tab has no receiver", async () => {
     sendMessageMock
       .mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+      .mockResolvedValueOnce({ ready: true })
       .mockResolvedValueOnce(undefined)
     executeScriptMock.mockResolvedValue(undefined)
 
@@ -167,7 +195,45 @@ describe("background context menu", () => {
       target: { tabId: 5, frameIds: [0] },
       files: ["/content-scripts/selection.js"],
     })
-    expect(sendMessageMock).toHaveBeenCalledTimes(2)
+    expect(sendMessageMock).toHaveBeenCalledTimes(3)
+  })
+
+  it("waits for the injected selection content script before retrying selection translation", async () => {
+    sendMessageMock
+      .mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+      .mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+      .mockResolvedValueOnce({ ready: false })
+      .mockResolvedValueOnce({ ready: true })
+      .mockResolvedValueOnce(undefined)
+    executeScriptMock.mockResolvedValue(undefined)
+    vi.useFakeTimers()
+
+    const { MENU_ID_SELECTION_TRANSLATE, registerContextMenuListeners } = await import("../context-menu")
+    registerContextMenuListeners()
+
+    const clickHandler = contextMenuClickListeners[0]
+    if (!clickHandler) {
+      throw new Error("Context menu click listener was not registered")
+    }
+
+    const clickPromise = clickHandler({
+      menuItemId: MENU_ID_SELECTION_TRANSLATE,
+      selectionText: "Selected text",
+      frameId: 0,
+    }, { id: 5 })
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(50)
+    await vi.advanceTimersByTimeAsync(50)
+    await clickPromise
+    vi.useRealTimers()
+
+    expect(sendMessageMock.mock.calls.map(call => call[0])).toEqual([
+      "openSelectionTranslationFromContextMenu",
+      "getSelectionContentScriptStatus",
+      "getSelectionContentScriptStatus",
+      "getSelectionContentScriptStatus",
+      "openSelectionTranslationFromContextMenu",
+    ])
   })
 
   it("routes custom action menu clicks to the matching tab and frame", async () => {
@@ -196,5 +262,77 @@ describe("background context menu", () => {
       { actionId: "dictionary", selectionText: "Selected text" },
       { tabId: 5, frameId: 7 },
     )
+  })
+
+  it("routes PDF reader custom actions through extension runtime messaging", async () => {
+    const {
+      MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX,
+      registerContextMenuListeners,
+    } = await import("../context-menu")
+
+    registerContextMenuListeners()
+
+    const clickHandler = contextMenuClickListeners[0]
+    if (!clickHandler) {
+      throw new Error("Context menu click listener was not registered")
+    }
+
+    await clickHandler({
+      menuItemId: `${MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX}dictionary`,
+      selectionText: "Selected PDF text",
+      frameId: 0,
+    }, {
+      id: 5,
+      url: "chrome-extension://extension-id/pdf-reader.html",
+    })
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      "openSelectionCustomActionFromContextMenu",
+      { actionId: "dictionary", selectionText: "Selected PDF text", tabId: 5 },
+    )
+    expect(executeScriptMock).not.toHaveBeenCalled()
+  })
+
+  it("injects the selection content script and retries custom actions after readiness", async () => {
+    sendMessageMock
+      .mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+      .mockResolvedValueOnce({ ready: false })
+      .mockResolvedValueOnce({ ready: true })
+      .mockResolvedValueOnce(undefined)
+    executeScriptMock.mockResolvedValue(undefined)
+    vi.useFakeTimers()
+
+    const {
+      MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX,
+      registerContextMenuListeners,
+    } = await import("../context-menu")
+
+    registerContextMenuListeners()
+
+    const clickHandler = contextMenuClickListeners[0]
+    if (!clickHandler) {
+      throw new Error("Context menu click listener was not registered")
+    }
+
+    const clickPromise = clickHandler({
+      menuItemId: `${MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX}dictionary`,
+      selectionText: "Selected text",
+      frameId: 0,
+    }, { id: 5 })
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(50)
+    await clickPromise
+    vi.useRealTimers()
+
+    expect(executeScriptMock).toHaveBeenCalledWith({
+      target: { tabId: 5, frameIds: [0] },
+      files: ["/content-scripts/selection.js"],
+    })
+    expect(sendMessageMock.mock.calls.map(call => call[0])).toEqual([
+      "openSelectionCustomActionFromContextMenu",
+      "getSelectionContentScriptStatus",
+      "getSelectionContentScriptStatus",
+      "openSelectionCustomActionFromContextMenu",
+    ])
   })
 })

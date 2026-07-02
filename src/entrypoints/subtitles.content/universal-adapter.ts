@@ -174,7 +174,8 @@ export class UniversalVideoAdapter {
     ) as HTMLVideoElement | null
 
     if (!video) {
-      toast.error(i18n.t("subtitles.errors.videoNotFound"))
+      if (!this.config.silentErrors)
+        toast.error(i18n.t("subtitles.errors.videoNotFound"))
       return
     }
 

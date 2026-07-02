@@ -14,6 +14,10 @@ export const MENU_ID_SELECTION_TRANSLATE = "read-frog-selection-translate"
 export const MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX = "read-frog-selection-custom-action:"
 const HOST_CONTENT_SCRIPT_FILE = "/content-scripts/host.js"
 const SELECTION_CONTENT_SCRIPT_FILE = "/content-scripts/selection.js"
+const CONTENT_SCRIPT_READY_TIMEOUT_MS = 2_000
+const CONTENT_SCRIPT_READY_RETRY_MS = 50
+
+type ContentScriptMessageTarget = number | { tabId: number, frameId: number }
 
 function isMissingContentScriptReceiver(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
@@ -21,10 +25,44 @@ function isMissingContentScriptReceiver(error: unknown) {
     || message.includes("Receiving end does not exist")
 }
 
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function waitForSelectionContentScriptReady(target: ContentScriptMessageTarget) {
+  const deadline = Date.now() + CONTENT_SCRIPT_READY_TIMEOUT_MS
+  let lastMissingReceiverError: unknown
+
+  while (Date.now() <= deadline) {
+    try {
+      const status = await sendMessage("getSelectionContentScriptStatus", undefined, target)
+      if (status.ready) {
+        return
+      }
+    }
+    catch (error) {
+      if (!isMissingContentScriptReceiver(error)) {
+        throw error
+      }
+
+      lastMissingReceiverError = error
+    }
+
+    await delay(CONTENT_SCRIPT_READY_RETRY_MS)
+  }
+
+  if (lastMissingReceiverError) {
+    throw lastMissingReceiverError
+  }
+
+  throw new Error("Selection content script did not become ready after injection.")
+}
+
 async function sendWithContentScriptRecovery(
   send: () => Promise<unknown>,
   target: { tabId: number, frameId: number },
   contentScriptFile: typeof HOST_CONTENT_SCRIPT_FILE | typeof SELECTION_CONTENT_SCRIPT_FILE,
+  waitUntilReady?: () => Promise<void>,
 ) {
   try {
     await send()
@@ -38,12 +76,18 @@ async function sendWithContentScriptRecovery(
       target: { tabId: target.tabId, frameIds: [target.frameId] },
       files: [contentScriptFile],
     })
+    await waitUntilReady?.()
     await send()
   }
 }
 
 function getSelectionCustomActionMenuId(actionId: string) {
   return `${MENU_ID_SELECTION_CUSTOM_ACTION_PREFIX}${actionId}`
+}
+
+function isPdfReaderTab(tab: Browser.tabs.Tab) {
+  const url = tab.url ?? ""
+  return url.startsWith(browser.runtime.getURL("/pdf-reader.html"))
 }
 
 /**
@@ -206,7 +250,7 @@ async function handleContextMenuClick(
   }
 
   if (info.menuItemId === MENU_ID_SELECTION_TRANSLATE) {
-    await handleSelectionTranslateClick(info, tab.id)
+    await handleSelectionTranslateClick(info, tab)
     return
   }
 
@@ -216,7 +260,7 @@ async function handleContextMenuClick(
       return
     }
 
-    await handleSelectionCustomActionClick(info, tab.id, actionId)
+    await handleSelectionCustomActionClick(info, tab, actionId)
   }
 }
 
@@ -250,10 +294,20 @@ async function handleTranslateClick(tabId: number) {
 
 async function handleSelectionTranslateClick(
   info: Browser.contextMenus.OnClickData,
-  tabId: number,
+  tab: Browser.tabs.Tab,
 ) {
   const selectionText = info.selectionText?.trim()
   if (!selectionText) {
+    return
+  }
+
+  const tabId = tab.id
+  if (!tabId) {
+    return
+  }
+
+  if (isPdfReaderTab(tab)) {
+    await sendMessage("openSelectionTranslationFromContextMenu", { selectionText, tabId })
     return
   }
 
@@ -265,16 +319,27 @@ async function handleSelectionTranslateClick(
     () => sendMessage("openSelectionTranslationFromContextMenu", { selectionText }, target),
     { tabId, frameId: info.frameId ?? 0 },
     SELECTION_CONTENT_SCRIPT_FILE,
+    () => waitForSelectionContentScriptReady(target),
   )
 }
 
 async function handleSelectionCustomActionClick(
   info: Browser.contextMenus.OnClickData,
-  tabId: number,
+  tab: Browser.tabs.Tab,
   actionId: string,
 ) {
   const selectionText = info.selectionText?.trim()
   if (!selectionText) {
+    return
+  }
+
+  const tabId = tab.id
+  if (!tabId) {
+    return
+  }
+
+  if (isPdfReaderTab(tab)) {
+    await sendMessage("openSelectionCustomActionFromContextMenu", { actionId, selectionText, tabId })
     return
   }
 
@@ -286,5 +351,6 @@ async function handleSelectionCustomActionClick(
     () => sendMessage("openSelectionCustomActionFromContextMenu", { actionId, selectionText }, target),
     { tabId, frameId: info.frameId ?? 0 },
     SELECTION_CONTENT_SCRIPT_FILE,
+    () => waitForSelectionContentScriptReady(target),
   )
 }

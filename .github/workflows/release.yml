@@ -18,12 +18,16 @@ env:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   release:
     name: Release Extension
     runs-on: ubuntu-latest
     env:
-      SKIP_ENV_VALIDATION: true
+      WXT_SKIP_ENV_VALIDATION: true
       HUSKY: 0
     steps:
       - name: Checkout Repo

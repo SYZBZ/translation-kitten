@@ -15,8 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/base-ui/dialog"
-import { shadowWrapper } from "@/entrypoints/selection.content"
 import { SELECTION_CONTENT_OVERLAY_LAYERS } from "@/entrypoints/selection.content/overlay-layers"
+import { shadowWrapper } from "@/entrypoints/selection.content/shadow-wrapper-ref"
 import { env } from "@/env"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
 import { authClient } from "@/utils/auth/auth-client"

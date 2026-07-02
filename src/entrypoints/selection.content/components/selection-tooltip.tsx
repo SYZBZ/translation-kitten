@@ -3,8 +3,8 @@ import { useCallback, useState } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/base-ui/tooltip"
 import { useSelectionPopoverOverlayProps } from "@/components/ui/selection-popover"
 import { cn } from "@/utils/styles/utils"
-import { shadowWrapper } from ".."
 import { SELECTION_CONTENT_OVERLAY_LAYERS } from "../overlay-layers"
+import { shadowWrapper } from "../shadow-wrapper-ref"
 
 const TOOLTIP_TRIGGER_PRESS_REASON = "trigger-press"
 

@@ -10,6 +10,7 @@ import { useAtomValue, useSetAtom } from "jotai"
 import { createContext, use, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { SelectionPopover } from "@/components/ui/selection-popover"
+import { isPdfContextMenuMessageForThisTab } from "@/entrypoints/pdf-reader/pdf-context-menu-target"
 import { ANALYTICS_FEATURE, ANALYTICS_SURFACE } from "@/types/analytics"
 import { isLLMProviderConfig, isTranslateProviderConfig } from "@/types/config/provider"
 import { createFeatureUsageContext, trackFeatureUsed } from "@/utils/analytics"
@@ -26,10 +27,10 @@ import { isPageTranslationShortcutEmpty, isValidConfiguredPageTranslationShortcu
 import { getTranslatePromptFromConfig } from "@/utils/prompts/translate"
 import { resolveModelId } from "@/utils/providers/model-id"
 import { getProviderOptionsWithOverride } from "@/utils/providers/options"
-import { shadowWrapper } from "../.."
 import { SelectionToolbarErrorAlert } from "../../components/selection-toolbar-error-alert"
 import { SelectionToolbarFooterContent } from "../../components/selection-toolbar-footer-content"
 import { SelectionToolbarTitleContent } from "../../components/selection-toolbar-title-content"
+import { shadowWrapper } from "../../shadow-wrapper-ref"
 import {
   isSelectionToolbarVisibleAtom,
   selectionSessionAtom,
@@ -530,7 +531,11 @@ export function SelectionTranslationProvider({
   }, [openFromShortcut, selectionToolbar.features.translate.shortcut])
 
   useEffect(() => {
-    return onMessage("openSelectionTranslationFromContextMenu", (message) => {
+    return onMessage("openSelectionTranslationFromContextMenu", async (message) => {
+      if (message.data.tabId !== undefined && !(await isPdfContextMenuMessageForThisTab(message.data.tabId))) {
+        return
+      }
+
       openFromContextMenu(message.data.selectionText)
     })
   }, [openFromContextMenu])

@@ -1,9 +1,8 @@
 import type { Config } from "@/types/config/config"
-import { kebabCase } from "case-anything"
 import { defineContentScript, storage } from "#imports"
 import { env } from "@/env"
 import { getLocalConfig } from "@/utils/config/storage"
-import { APP_NAME } from "@/utils/constants/app"
+import { APP_SLUG } from "@/utils/constants/app"
 import { CONFIG_STORAGE_KEY } from "@/utils/constants/config"
 import { onMessage, sendMessage } from "@/utils/message"
 
@@ -11,7 +10,7 @@ export default defineContentScript({
   matches: env.WXT_OFFICIAL_SITE_ORIGINS.map((origin: string) => `${origin}/*`),
   async main() {
     onMessage("pinStateChanged", (msg) => {
-      window.postMessage({ source: `${kebabCase(APP_NAME)}-ext`, ...msg }, "*")
+      window.postMessage({ source: `${APP_SLUG}-ext`, ...msg }, "*")
     })
 
     window.addEventListener("message", async (e) => {
@@ -23,7 +22,7 @@ export default defineContentScript({
       const { source, type } = e.data || {}
       if (source === "read-frog-page" && type === "getPinState") {
         const isPinned = await sendMessage("getPinState", undefined)
-        window.postMessage({ source: `${kebabCase(APP_NAME)}-ext`, type: "getPinState", data: { isPinned } }, "*")
+        window.postMessage({ source: `${APP_SLUG}-ext`, type: "getPinState", data: { isPinned } }, "*")
       }
       else if (source === "read-frog-page" && type === "setTargetLanguage") {
         const langCodeISO6393 = e.data.langCodeISO6393 ?? "eng"
@@ -39,7 +38,7 @@ export default defineContentScript({
       }
       else if (source === "read-frog-page" && type === "getTargetLanguage") {
         const targetLanguage = config.language.targetCode
-        window.postMessage({ source: `${kebabCase(APP_NAME)}-ext`, type: "getTargetLanguage", data: { targetLanguage } }, "*")
+        window.postMessage({ source: `${APP_SLUG}-ext`, type: "getTargetLanguage", data: { targetLanguage } }, "*")
       }
     })
   },

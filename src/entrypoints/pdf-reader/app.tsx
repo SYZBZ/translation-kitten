@@ -6,7 +6,7 @@ import { getProviderConfigById } from "@/utils/config/helpers"
 import { getLocalConfig } from "@/utils/config/storage"
 import { translatePdfText } from "@/utils/pdf/translate"
 import { PdfPageRow } from "./pdf-page-row"
-import { extractPdfSegments } from "./pdf-segments"
+import { createPdfTranslationBlocks, extractPdfSegments } from "./pdf-segments"
 import { createPdfTranslationBatches, prioritizePdfSegments } from "./pdf-translation-scheduler"
 import { usePdfDocument } from "./use-pdf-document"
 
@@ -32,7 +32,7 @@ function App() {
   const [translationLanguage, setTranslationLanguage] = useState<Config["language"] | null>(null)
   const [discoveryDone, setDiscoveryDone] = useState(false)
   const [isProcessingBatch, setIsProcessingBatch] = useState(false)
-  const [failedSegmentIds, setFailedSegmentIds] = useState<Set<string>>(() => new Set())
+  const [failedBlockIds, setFailedBlockIds] = useState<Set<string>>(() => new Set())
   const sessionIdRef = useRef(0)
 
   useEffect(() => {
@@ -48,7 +48,7 @@ function App() {
     setTranslationLanguage(null)
     setDiscoveryDone(false)
     setIsProcessingBatch(false)
-    setFailedSegmentIds(new Set())
+    setFailedBlockIds(new Set())
   }, [document])
 
   const handleSegments = useCallback((page: number, nextSegments: PdfRenderableSegment[]) => {
@@ -72,13 +72,25 @@ function App() {
     })
   }, [])
 
-  const allSegments = useMemo(
-    () => Object.keys(segmentsByPage).map(Number).sort((a, b) => a - b).flatMap(page => segmentsByPage[page]),
+  const translationBlocksByPage = useMemo(
+    () => Object.fromEntries(
+      Object.keys(segmentsByPage)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .map(page => [page, createPdfTranslationBlocks(segmentsByPage[page] ?? [])]),
+    ),
     [segmentsByPage],
   )
+  const allTranslationBlocks = useMemo(
+    () => Object.keys(translationBlocksByPage)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .flatMap(page => translationBlocksByPage[page]),
+    [translationBlocksByPage],
+  )
   const translatedCount = useMemo(
-    () => allSegments.filter(segment => Boolean(translations[segment.id])).length,
-    [allSegments, translations],
+    () => allTranslationBlocks.filter(block => Boolean(translations[block.id])).length,
+    [allTranslationBlocks, translations],
   )
 
   const discoverDocumentSegments = useCallback(async (sessionId: number) => {
@@ -107,14 +119,14 @@ function App() {
 
     setTranslationState("translating")
     setTranslationError(null)
-    setFailedSegmentIds(new Set())
+    setFailedBlockIds(new Set())
     try {
       const config = await getLocalConfig()
       if (!config)
-        throw new Error("找不到翻譯設定，請先開啟擴充功能設定頁。")
+        throw new Error("找不到翻譯設定，請先完成擴充功能設定。")
       const provider = getProviderConfigById(config.providersConfig, config.translate.providerId)
       if (!provider)
-        throw new Error("目前翻譯服務不可用，請重新選擇翻譯服務。")
+        throw new Error("找不到可用的 PDF 翻譯服務，請先在設定中啟用翻譯提供者。")
 
       const sessionId = sessionIdRef.current + 1
       sessionIdRef.current = sessionId
@@ -133,16 +145,16 @@ function App() {
     if (!translationRequested || !translationProvider || !translationLanguage || isProcessingBatch)
       return
 
-    const pending = prioritizePdfSegments(segmentsByPage, nearPages, translations)
-      .filter(segment => !failedSegmentIds.has(segment.id))
+    const pending = prioritizePdfSegments(translationBlocksByPage, nearPages, translations)
+      .filter(block => !failedBlockIds.has(block.id))
     const batch = createPdfTranslationBatches(pending, 4)[0]
 
     if (!batch) {
       if (discoveryDone) {
         setTranslationRequested(false)
-        if (failedSegmentIds.size > 0) {
+        if (failedBlockIds.size > 0) {
           setTranslationState("error")
-          setTranslationError(`${failedSegmentIds.size} 段翻譯失敗，可按「重試翻譯」再次處理。`)
+          setTranslationError(`${failedBlockIds.size} 個段落翻譯失敗；其餘段落已保留。`)
         }
         else {
           setTranslationState("ready")
@@ -153,8 +165,8 @@ function App() {
 
     const sessionId = sessionIdRef.current
     setIsProcessingBatch(true)
-    void Promise.allSettled(batch.map(segment => translatePdfText(
-      segment.source,
+    void Promise.allSettled(batch.map(block => translatePdfText(
+      block.source,
       translationLanguage,
       translationProvider,
     )))
@@ -165,30 +177,30 @@ function App() {
         const completed: Record<string, string> = {}
         const failed = new Set<string>()
         results.forEach((result, index) => {
-          const segment = batch[index]
+          const block = batch[index]
           if (result.status === "fulfilled" && result.value.trim())
-            completed[segment.id] = result.value
+            completed[block.id] = result.value
           else
-            failed.add(segment.id)
+            failed.add(block.id)
         })
         if (Object.keys(completed).length > 0)
           setTranslations(current => ({ ...current, ...completed }))
         if (failed.size > 0)
-          setFailedSegmentIds(current => new Set([...current, ...failed]))
+          setFailedBlockIds(current => new Set([...current, ...failed]))
       })
       .finally(() => {
         if (sessionIdRef.current === sessionId)
           setIsProcessingBatch(false)
       })
-  }, [discoveryDone, failedSegmentIds, isProcessingBatch, nearPages, segmentsByPage, translationLanguage, translationProvider, translationRequested, translations])
+  }, [discoveryDone, failedBlockIds, isProcessingBatch, nearPages, translationBlocksByPage, translationLanguage, translationProvider, translationRequested, translations])
 
   const progressLabel = translationState === "translating"
-    ? `翻譯中 ${translatedCount}/${allSegments.length || "…"}`
+    ? `翻譯中 ${translatedCount}/${allTranslationBlocks.length || "讀取中"}`
     : translationState === "ready"
       ? `已翻譯 ${translatedCount} 段`
       : translationState === "error"
-        ? "重試翻譯"
-        : "開始翻譯"
+        ? "重新翻譯"
+        : "翻譯 PDF"
 
   return (
     <main>
@@ -198,7 +210,7 @@ function App() {
           <div>
             <strong>翻譯小貓</strong>
             <span>
-              PDF 翻譯本
+              PDF 翻譯
               {document ? ` · ${document.numPages} 頁` : ""}
             </span>
           </div>
@@ -216,9 +228,9 @@ function App() {
 
       {(loading || error || translationError || (!querySource && !file)) && (
         <div className={`reader-notice ${error || translationError ? "error" : ""}`}>
-          {loading && "正在載入 PDF…"}
+          {loading && "正在讀取 PDF..."}
           {!loading && (error || translationError)}
-          {!loading && !error && !translationError && !querySource && !file && "請選擇 PDF，或從 Chrome 中的 PDF 頁面開啟翻譯小貓。"}
+          {!loading && !error && !translationError && !querySource && !file && "請選擇 PDF，或從 Chrome 的 PDF 頁面用翻譯小貓開啟。"}
         </div>
       )}
 
@@ -227,8 +239,8 @@ function App() {
           <div className="column-headings">
             <span>原始 PDF</span>
             <span>
-              翻譯本
-              {translationState === "translating" ? ` · ${translatedCount}/${allSegments.length || "載入中"}` : ""}
+              翻譯結果
+              {translationState === "translating" ? ` · ${translatedCount}/${allTranslationBlocks.length || "讀取中"}` : ""}
             </span>
           </div>
           <div className="reader-pages">
